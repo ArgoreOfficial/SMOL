@@ -4,61 +4,11 @@
 #include <sstream>
 #include <string>
 
-#include "json.hpp"
-#include "Base64.h" // https://gist.github.com/tomykaira/f0fd86b6c73063283afe550bc5d77594
+#include <sMemory.h>
 
-struct sMemory 
-{
-	char* data = nullptr;
-	size_t size = 0;
+#include "cCatalog.h"
 
-	void clear()
-	{
-		delete data;
-		data = nullptr;
-		size = 0;
-	}
-
-	void dump( const std::string& _path )
-	{
-		std::ofstream file( _path );
-		file.write( data, size );
-		file.close();
-	}
-};
-
-nlohmann::json loadCatalog( const std::string& _path )
-{
-	std::fstream fstream( _path );
-	if ( !fstream.is_open() )
-	{
-		printf( "Couldn't find file '%s'\n", _path.c_str() );
-		return {};
-	}
-
-	std::stringstream buffer;
-	buffer << fstream.rdbuf();
-	
-	nlohmann::json catalog = nlohmann::json::parse( buffer.str() );
-	
-	return catalog;
-}
-
-sMemory getCatalogMemory( nlohmann::json& _catalog, std::string _key )
-{
-	std::string dataString = _catalog.at( _key );
-	std::string data;
-
-	macaron::Base64::Decode( dataString, data );
-	sMemory mem;
-	mem.data = new char[ data.size() ];
-	mem.size = data.size();
-	memcpy( mem.data, data.data(), mem.size );
-
-	return mem;
-}
-
-void printKeyData( sMemory& _keyData )
+void printKeyData( smol::sMemory& _keyData )
 {
 	// THIS IS REALLY DANGEROUS
 	int numStrings = 0;
@@ -74,12 +24,7 @@ void printKeyData( sMemory& _keyData )
 	}
 }
 
-int readInt32FromMemory( sMemory& _mem, int _index )
-{
-	return *reinterpret_cast<int*>( &_mem.data[ _index ] );
-}
-
-void printEntryData( sMemory& _entryData )
+void printEntryData( smol::sMemory& _entryData )
 {
 	//for ( size_t i = 0; i < _entryData.size; i += sizeof(int) )
 	//{
@@ -92,7 +37,7 @@ void printEntryData( sMemory& _entryData )
 	//}
 
 
-	int count = readInt32FromMemory( _entryData, 0 );
+	int count = _entryData.getInt32( 0 );
 	
 	const int bytesPerInt32 = sizeof( int );
 	const int entryDataItemPerEntry = 7;
@@ -101,19 +46,19 @@ void printEntryData( sMemory& _entryData )
 	for ( int i = 0; i < count; i++ )
 	{
 		int index = bytesPerInt32 + i * ( bytesPerInt32 * entryDataItemPerEntry );
-		int internalId = readInt32FromMemory( _entryData, index );
+		int internalId = _entryData.getInt32( index );
 		index += bytesPerInt32;
-		int providerIndex = readInt32FromMemory( _entryData, index );
+		int providerIndex = _entryData.getInt32( index );
 		index += bytesPerInt32;
-		int dependencyKeyIndex = readInt32FromMemory( _entryData, index );
+		int dependencyKeyIndex = _entryData.getInt32( index );
 		index += bytesPerInt32;
-		int depHash = readInt32FromMemory( _entryData, index );
+		int depHash = _entryData.getInt32( index );
 		index += bytesPerInt32;
-		int dataIndex = readInt32FromMemory( _entryData, index );
+		int dataIndex = _entryData.getInt32( index );
 		index += bytesPerInt32;
-		int primaryKey = readInt32FromMemory( _entryData, index );
+		int primaryKey = _entryData.getInt32( index );
 		index += bytesPerInt32;
-		int resourceType = readInt32FromMemory( _entryData, index );
+		int resourceType = _entryData.getInt32( index );
 
 		printf( "internalId:         %i\n", internalId );
 		printf( "providerIndex:      %i\n", providerIndex );
@@ -133,22 +78,14 @@ void printEntryData( sMemory& _entryData )
 
 int main()
 {
-	printf("Loading Catalog\n");
-	nlohmann::json catalog = loadCatalog( "../dat/catalog.json" );
-	if ( catalog.empty() )
+	
+	smol::cCatalog catalog;
+	catalog.loadFromFile( "../dat/catalog.json" );
+	if ( !catalog.loaded() )
 	{
-		printf( "Failed to open catalog, aborting\n" );
+		printf( "Failed to load catalog, aborting\n" );
 		return 0;
 	}
-
-	printf( "Parsing Data\n" );
-	sMemory keyData   = getCatalogMemory( catalog, "m_KeyDataString" );
-	sMemory entryData = getCatalogMemory( catalog, "m_EntryDataString" );
-	
-	keyData.dump( "../dumps/m_KeyDataString.bin" );
-	entryData.dump( "../dumps/m_EntryDataString.bin" );
-
-	printEntryData( entryData );
 
 	return 0;
 }
