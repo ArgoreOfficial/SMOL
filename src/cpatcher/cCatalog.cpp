@@ -7,6 +7,8 @@
 
 #include "Base64.h" // https://gist.github.com/tomykaira/f0fd86b6c73063283afe550bc5d77594
 
+///////////////////////////////////////////////////////////////////////////////////////
+
 void smol::cCatalog::loadFromFile( const std::string& _path )
 {
 	m_jdata = loadCatalogJson( _path );
@@ -29,6 +31,8 @@ void smol::cCatalog::loadFromFile( const std::string& _path )
 	m_loaded = true;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+
 nlohmann::json smol::cCatalog::loadCatalogJson( const std::string& _path )
 {
 	std::fstream fstream( _path );
@@ -46,6 +50,8 @@ nlohmann::json smol::cCatalog::loadCatalogJson( const std::string& _path )
 	return catalog;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+
 smol::sMemory smol::cCatalog::getCatalogMemory( std::string _key )
 {
 	std::string dataString = m_jdata.at( _key );
@@ -60,23 +66,60 @@ smol::sMemory smol::cCatalog::getCatalogMemory( std::string _key )
 	return mem;
 }
 
+///////////////////////////////////////////////////////////////////////////////////////
+
+void smol::cCatalog::resolveKey( int _index, sKeyObject& _key )
+{
+	_key.type = static_cast<eObjectType>( m_keyData.data[ _index ] );
+
+	switch ( _key.type )
+	{
+	case eObjectType::UnicodeString: /// remove? unicode and ascii are identical
+	{
+		//var dataLength = BitConverter.ToInt32( keyData, dataIndex );
+		//return Encoding.Unicode.GetString( keyData, dataIndex + 4, dataLength );
+		int stringLength = m_keyData.at<int>( _index );
+		_key.val.unicodeString = new std::string( m_keyData.data + _index + 4, stringLength );
+	} break;
+	case eObjectType::AsciiString:
+	{
+		//var dataLength = BitConverter.ToInt32( keyData, dataIndex );
+		//return Encoding.ASCII.GetString( keyData, dataIndex + 4, dataLength );
+		int stringLength = m_keyData.at<int>( _index );
+		_key.val.asciiString = new std::string( m_keyData.data + _index + 4, stringLength );
+	} break;
+
+	case eObjectType::UInt16: _key.val.uint16 = m_keyData.at<uint16_t>( _index ); break;
+	case eObjectType::UInt32: _key.val.uint32 = m_keyData.at<uint32_t>( _index ); break;
+	case eObjectType::Int32:  _key.val.int32  = m_keyData.at<int32_t> ( _index ); break;
+
+	case eObjectType::Hash128: break; //return Hash128.Parse( Encoding.ASCII.GetString( keyData, dataIndex + 1, keyData[ dataIndex ] ) );
+	
+	case eObjectType::Type: 
+	case eObjectType::JsonObject: printf( "Error, unsuported key\n" ); break;
+
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////
+
 void smol::cCatalog::createLocator()
 {
 	m_bucketData = getCatalogMemory( "m_BucketDataString" );
-	int numBuckets = m_bucketData.getInt32( 0 );
+	int numBuckets = m_bucketData.at<int32_t>( 0 );
 	m_buckets.resize( numBuckets );
 
 	int bi = 4;
 	for ( int i = 0; i < numBuckets; i++ )
 	{
-		int index = m_bucketData.getInt32( bi );
+		int index = m_bucketData.at<int32_t>( bi );
 		bi += 4;
-		int numEntries = m_bucketData.getInt32( bi );
+		int numEntries = m_bucketData.at<int32_t>( bi );
 		bi += 4;
 		int* entryArray = new int[ numEntries ];
 		for ( int c = 0; c < numEntries; c++ )
 		{
-			entryArray[ c ] = m_bucketData.getInt32( bi );
+			entryArray[ c ] = m_bucketData.at<int32_t>( bi );
 			bi += 4;
 		}
 
@@ -89,51 +132,36 @@ void smol::cCatalog::createLocator()
 
 
 	m_extraData = getCatalogMemory( "m_ExtraDataString" );
-	m_keyData = getCatalogMemory( "m_KeyDataString" );
-	int numKeys = m_keyData.getInt32( 0 );
-	// var keys = new object[ numKeys ];
-	//for ( int i = 0; i < buckets.Length; i++ )
-	//	keys[ i ] = SerializationUtilities.ReadObjectFromByteArray( keyData, buckets[ i ].dataOffset );
-
+	m_keyData   = getCatalogMemory( "m_KeyDataString" );
+	int numKeys = m_keyData.at<int32_t>( 0 );
+	m_keys.resize( numKeys );
+	for ( int i = 0; i < m_buckets.size(); i++ )
+		resolveKey( m_buckets[ i ].dataOffset, m_keys[ i ] );
+	
 	printf( "Loaded %i keys\n", numKeys );
 
-	//var locator = new ResourceLocationMap( m_LocatorId, buckets.Length );
-
 	m_entryData = getCatalogMemory( "m_EntryDataString" );
-	int numEntries = m_entryData.getInt32( 0 );
-	//var locations = new IResourceLocation[ count ];
+	int numEntries = m_entryData.at<int32_t>( 0 );
+	m_entries.resize( numEntries );
+
 	for ( int i = 0; i < numEntries; i++ )
 	{
 		int index = m_cBytesPerInt32 + i * ( m_cBytesPerInt32 * m_cEntryDataItemPerEntry );
-		int internalId = m_entryData.getInt32( index );
+		m_entries[ i ].internalId = m_entryData.at<int32_t>( index );
 		index += m_cBytesPerInt32;
-		int providerIndex = m_entryData.getInt32( index );
+		m_entries[ i ].providerIndex = m_entryData.at<int32_t>( index );
 		index += m_cBytesPerInt32;
-		int dependencyKeyIndex = m_entryData.getInt32( index );
+		m_entries[ i ].dependencyKeyIndex = m_entryData.at<int32_t>( index );
 		index += m_cBytesPerInt32;
-		int depHash = m_entryData.getInt32( index );
+		m_entries[ i ].depHash = m_entryData.at<int32_t>( index );
 		index += m_cBytesPerInt32;
-		int dataIndex = m_entryData.getInt32( index );
+		m_entries[ i ].dataIndex = m_entryData.at<int32_t>( index );
 		index += m_cBytesPerInt32;
-		int primaryKey = m_entryData.getInt32( index );
+		m_entries[ i ].primaryKey = m_entryData.at<int32_t>( index );
 		index += m_cBytesPerInt32;
-		int resourceType = m_entryData.getInt32( index );
-
-		//object data = dataIndex < 0 ? null : SerializationUtilities.ReadObjectFromByteArray( extraData, dataIndex );
-		//locations[ i ] = new CompactLocation( locator, Addressables.ResolveInternalId( ExpandInternalId( m_InternalIdPrefixes, m_InternalIds[ internalId ] ) ),
-		//									  m_ProviderIds[ providerIndex ], dependencyKeyIndex < 0 ? null : keys[ dependencyKeyIndex ], data, depHash, keys[ primaryKey ].ToString(), m_resourceTypes[ resourceType ].Value );
+		m_entries[ i ].resourceType = m_entryData.at<int32_t>( index );
 	}
 
 	printf( "Loaded %i Entries\n", numEntries );
-
-	for ( int i = 0; i < m_buckets.size(); i++ )
-	{
-		sBucket& bucket = m_buckets[ i ];
-		//var key = keys[ i ];
-		//var locs = new IResourceLocation[ bucket.entries.Length ];
-		//for ( int b = 0; b < bucket.entries.Length; b++ )
-		//	locs[ b ] = locations[ bucket.entries[ b ] ];
-		//locator.Add( key, locs );
-	}
 
 }
