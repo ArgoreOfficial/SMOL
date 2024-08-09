@@ -6,7 +6,7 @@
 
 #include <sMemory.h>
 
-#include "cCatalog.h"
+#include "catalog/cCatalog.h"
 
 void printKeyData( smol::sMemory& _keyData )
 {
