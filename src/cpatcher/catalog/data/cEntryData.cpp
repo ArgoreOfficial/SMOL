@@ -10,8 +10,6 @@ void smol::cEntryData::fromMemory( sMemory& _memory, sMemory& _extraData )
 	int numEntries = _memory.at<int32_t>( 0 );
 	m_entries.resize( numEntries );
 
-	printf( "%s\n", _extraData.encodeBase64().c_str() );
-
 	for ( int i = 0; i < numEntries; i++ )
 	{
 		int index = bytesPerInt32 + i * ( bytesPerInt32 * m_entryDataItemPerEntry );
@@ -37,7 +35,6 @@ void smol::cEntryData::fromMemory( sMemory& _memory, sMemory& _extraData )
 
 
 			/// hardcoded sherman crc test
-
 			if ( data->type == eObjectType::JsonObject )
 			{
 				// parse json
@@ -45,20 +42,21 @@ void smol::cEntryData::fromMemory( sMemory& _memory, sMemory& _extraData )
 				std::string hash = jdata.at( "m_Hash" );
 				if ( hash == "eb57745bbeb40b4e7fe99937f4687023" )
 				{
+					data->val.jsonObject->toMemory();
+			/*
 					std::string bundleName = jdata[ "m_BundleName" ];
 
 					printf( "Editing sherman json\n" );
 					printf( "%s\n", jdata.dump().c_str() );
 					jdata[ "m_UseCrcForCachedBundles" ] = false;
 					printf( "%s\n", jdata.dump().c_str() );
+			*/
 				}
 			}
 		}
 		
 		
 	}
-	
-	
 
 	printf( "Loaded %i Entries\n", numEntries );
 }

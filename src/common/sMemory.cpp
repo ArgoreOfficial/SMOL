@@ -14,7 +14,7 @@ void smol::sMemory::dump( const std::string& _path )
 	std::ofstream file( _path );
 	file.write( data, size );
 	file.close();
-	printf( "Dumped %s (%i bytes)\n", _path.c_str(), size );
+	printf( "Dumped %s (%i bytes)\n", _path.c_str(), (int)size );
 }
 
 smol::sMemory smol::sMemory::decodeBase64( const std::string& _dataString )
